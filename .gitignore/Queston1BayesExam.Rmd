@@ -1,0 +1,245 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+Question 1
+As part of their analysis of the Federalist papers, Mosteller and Wallace (1964) recorded the frequency of use
+of various words in selected articles by Alexander Hamilton and James Madison. The articles were divided
+into blocks (247 for Hamilton, 262 for Madison) of about 200 words each, and the number of instances of
+various words in each block were recorded. The table below displays the results for the word "may."
+# occurrences in a block 0 1 2 3 4 5 6 7+ Total blocks
+# blocks (Hamilton) 128 67 32 14 4 1 1 0 247
+# blocks (Madison) 156 63 29 8 4 1 1 0 262
+
+These data are also provided in the hamilton and madison vectors.
+a) Fit a Poisson model to these data, with different parameters for each author and a noninformative/weakly informative prior distirbution. Plot the posterior density of the Poisson mean parameter for each author.
+Interpret.
+Fit the model in Stan:
+```{r}
+library(rstan)
+load("FinalExam.RData")
+hamilton
+madison
+
+mean(hamilton)
+mean(madison)
+```
+
+
+
+```{r}
+set.seed(500)
+mod1code <- '
+data{
+  int<lower=0> y[247];
+}
+parameters{
+  real <lower=0> lambda1;
+}
+model{
+  lambda1 ~gamma(0.01,0.01);
+  for(i in 1:247){
+    y[i] ~ poisson(lambda1);
+  }
+}
+'
+mod1dat <- list(y=hamilton)
+mod1 <- stan(model_code=mod1code, data=mod1dat)
+print(mod1,pars="lambda1")
+
+```
+
+
+```{r}
+set.seed(501)
+mod2code <- '
+data{
+  int<lower=0> y[262];
+}
+parameters{
+  real <lower=0> lambda2;
+}
+model{
+  lambda2 ~gamma(0.01,0.01);
+  for(i in 1:262){
+    y[i] ~ poisson(lambda2);
+  }
+}
+'
+
+mod2dat <- list(y=madison)
+mod2 <- stan(model_code=mod2code, data=mod2dat)
+print(mod2,pars="lambda2")
+```
+
+```{r}
+
+# Plot of posterior distribution of lambda1
+lambda1<-extract(mod1)$lambda1
+plot(density(lambda1), bty="l",xlab=expression(lambda_1), main="Posterior Distribution of lambda1(Hamilton)")
+
+# Plot of posterior distribution of lambda2
+lambda2<-extract(mod2)$lambda2
+plot(density(lambda2), bty="l",xlab=expression(lambda_2),main="Posterior Distribution of lambda2(Madison)")
+
+```
+
+Thus using noninformative/weakly informative prior distirbution we chose a gamma distribution since we expect $\lambda$ to be positive values greater than 0.We can see for the Hamilton  data the posterior  distribution of $\lambda$ settles to a mean of 0.81 while the posterior  distribution of $\lambda$ settles to a mean of  0.66 for the Madison data. Given the distribution of the data , these  values seem reasonable. 
+
+
+
+
+
+There are multiple parameterizations of the negative
+binomial distribution, but the most convenient for our purpose in Stan is neg_binomial_2;
+The mean and variance of this distribution are given by EX = $\mu$ and VarX = $\mu$  + $\mu$ $\mu$ /$\phi$ . Here, is called the "dispersion parameter," and $\delta$= 1/$\phi$ 
+
+
+
+b) Suggest reasonable noninformative/weakly informative priors for ?? and $\phi$  (or, if you prefer, for ?? and $\delta$ ).
+
+The negative binomial model can be used to address potential overdispersion relative to the Poisson. The negative binomial distribution  converges to a  possion distribution as  $\phi$ to becomes very large .
+Small values of $\phi$ drag the mode of the distribution towards 0.A reasonable noninformative/weakly informative priors for hamilton  are : $\mu$ must be a positive real number from say a gamma distribution. Since the distribution is skewed towards 0, we choose a Gamma(0.01,0.01) and  also $\phi$ must also be a positive real number hence we chose phi from a gamma distribution.Let $\phi$  be  a Gamma(0.01,0.02).
+A reasonable noninformative/weakly informative priors for madison are for $\mu$ is  Gamma(0.01,0.01)
+and  $\phi$  be  a Gamma(0.01,0.01)
+. ALso note that there is not much dispersion expected since the count of number of occurrences in a block cannot necessarily be heavily overdispersed.
+
+
+
+
+c) Using your priors from part b, fit a negative binomial model to these data, with different parameters for each author. Plot the posterior densities of each parameter. Interpret.
+
+```{r}
+set.seed(503)
+mod3code <- '
+data{
+  int<lower=0> y[247];
+ 
+}
+parameters{
+  real <lower=0> mu3;
+  real<lower=1>  phi3;
+}
+model{
+  mu3 ~gamma(0.01,0.01);
+  phi3 ~ gamma(0.01,0.02);
+  for(i in 1:247){
+    y[i] ~ neg_binomial_2(mu3,phi3);
+  }
+}
+'
+mod3dat <- list(y=hamilton)
+mod3 <- stan(model_code=mod3code, data=mod3dat)
+print(mod3,pars=c("mu3","phi3 "))
+```
+
+
+
+```{r}
+set.seed(504)
+mod4code <- '
+data{
+  int<lower=0> y[262];
+
+}
+parameters{
+  real <lower=0> mu4;
+  real<lower=1>  phi4;
+}
+model{
+  mu4 ~ gamma(0.01,0.01);
+  phi4 ~ gamma(0.01,0.01);
+  for(i in 1:262){
+    y[i] ~ neg_binomial_2(mu4,phi4);
+  }
+}
+'
+mod4dat <- list(y=madison)
+mod4 <- stan(model_code=mod4code, data=mod4dat)
+print(mod4,pars=c("mu4","phi4"))
+
+```
+So we can see that for hamilton, the posterior distribution for the  dispersion parameter has mean of 2.13 and the the posterior distribution for the  dispersion parameter for madison has mean of 1.49. Thus there is more overdispersion in the hamilton counts data than the madison data.
+
+
+
+
+d) Use posetrior predictive checks to determine which model provides a better fit to our data.
+#####Poisson Model ##############
+```{r}
+# Obtain posterior distribution of lambda for Hamilton
+par(mfrow=c(1,2))
+lambda1<- extract(mod1)$lambda1
+
+# Construct and plot the posterior predicitve distribution, 95% PI
+x.pred.a <- rpois(4000,lambda1)
+hist(x.pred.a,breaks=seq(min(x.pred.a)-.5,max(x.pred.a)+.5,1),
+col="lightgray",freq=FALSE,xlab=expression(tilde(x)),
+main="Poisson Post. Predictive (Hamilton)")
+x.pred.a.95 <- quantile(x.pred.a,c(.025,.975))
+abline(v=x.pred.a.95+c(-.5,.5),lty=2,lwd=2,col="red")
+mean(x.pred.a.95)
+x.pred.a.95
+
+# Obtain posterior distribution of lambda for Hamilton
+mu3<- extract(mod3)$mu3
+phi3<-extract(mod3)$phi3
+
+# Construct and plot the posterior predicitve distribution, 95% PI
+x.pred.a<-matrix(NA,4000,8)
+for(i in 1:8){ 
+x.pred.a[,i] <- rnbinom(4000,size=i,mu=mu3)
+} 
+
+hist(x.pred.a,breaks=seq(min(x.pred.a)-.5,max(x.pred.a)+.5,1),
+col="lightgray",freq=FALSE,xlab=expression(tilde(x)),
+main="Neg Binom Post. Predictive (Hamilton)")
+x.pred.a.95 <- quantile(x.pred.a,c(.025,.975))
+x.pred.a.95
+abline(v=x.pred.a.95+c(-.5,.5),lty=2,lwd=2,col="red")
+mean(x.pred.a.95)
+```
+
+```{r}
+# Obtain posterior distribution of lambda for Madison
+par(mfrow=c(1,2))
+lambda2<- extract(mod2)$lambda2
+# Construct and plot the posterior predicitve distribution, 95% PI
+x.pred.a <- rpois(4000,lambda2)
+hist(x.pred.a,breaks=seq(min(x.pred.a)-.5,max(x.pred.a)+.5,1),
+col="lightgray",freq=FALSE,xlab=expression(tilde(x)),
+main=" Poisson Posterior Predictive (Madison)")
+x.pred.a.95 <- quantile(x.pred.a,c(.025,.975))
+abline(v=x.pred.a.95+c(-.5,.5),lty=2,lwd=2,col="red")
+mean(x.pred.a.95)
+x.pred.a.95
+
+# Obtain posterior distribution of lambda for Madison
+mu4<- extract(mod4)$mu4
+phi4<-extract(mod4)$phi4
+
+# Construct and plot the posterior predicitve distribution, 95% PI
+x.pred.a<-matrix(NA,4000,8)
+for(i in 1:8){ 
+x.pred.a[,i] <- rnbinom(4000,size=i,mu=mu4)
+} 
+
+hist(x.pred.a,breaks=seq(min(x.pred.a)-.5,max(x.pred.a)+.5,1),
+col="lightgray",freq=FALSE,xlab=expression(tilde(x)),
+main="Neg Binom Post. Predictive (Madison)")
+x.pred.a.95 <- quantile(x.pred.a,c(.025,.975))
+x.pred.a.95
+abline(v=x.pred.a.95+c(-.5,.5),lty=2,lwd=2,col="red")
+```
+
+Thus given our results from predictive distribution of  both models we can see that the models perform well
+in predicting and telling us about the data .
+We can see the skewed distribution of the predictive model which closely aligns with our data. Both models seem to give indistinguishable results and this confirms the assertion that the Negative binomial converges to a poission under certain limiting conditions.
+The Negative binomial is better for 2 reasons :
+Unlike the poisson model ,It does not require the mean of the data  to be equal to the variance for this model to work well
+
+Secondly , it at least has a dispersion parameter which tell us some information about the dispersion in the data , which is very useful for future extrapolations and analysis .
