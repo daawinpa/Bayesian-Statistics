@@ -1,0 +1,233 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+Question 2 (p. 446, #1 - modified)
+Recall the "eight schools" example from class on October 10 (and section 5.5 in the text). The data are given
+in the schools data frame.
+Separate randomized experiments were performed to estimate the effects of coaching programs for the SAT-V
+(verbal) in each of eight high schools. In each of the eight schools, the mean coaching effect, $\theta_i$, was estimated
+(by yi) as was the standard error, $\sigma_i$. We may view the result from each school as derived from independent experiments, and since each individual study was quite large, we shall assume that the standard errors are known values. In this way, we have
+
+For parts a and b, assume $\lambda$ = 0.9.
+a) Compute the posterior distribution of ($\theta_1$,$\theta_2$ . . . , $\theta_8$) under this model, given the data provided. To illustrate the posterior distribution, provide a plot of the medians (or means) and 95% credible intervals for each parameter. Include the data on your plot as well.
+
+```{r}
+library(rstan)
+load("FinalExam.RData")
+attach(schools)
+schools
+```
+
+```{r}
+set.seed(501)
+mod1code <- '
+  data{ 
+    real y[8];
+    real sig[8];
+    real<lower=0,upper=1> lambda ;
+  }
+  parameters{
+   
+ real theta[8];
+  
+  }
+  model{ 
+
+
+    // Conditional data distribution
+    
+for(i in 1:8){
+      target += log_sum_exp(log(lambda)+normal_lpdf(theta[i]| 0, 10),
+              log(1-lambda) + normal_lpdf(theta[i]| 15, 25));
+
+      y[i] ~ normal(theta[i],sig[i]) ; 
+    }
+  }
+'
+
+mod1dat <- with(schools,list(y=estimate,sig=sig,lambda=0.9))
+
+mod1 <- stan(model_code=mod1code,data=mod1dat)
+
+print(mod1)
+
+mod100dat <- with(schools,list(y=estimate,sig=sig,lambda=0.1))
+mod100 <- stan(model_code=mod1code,data=mod100dat)
+print(mod1)
+```
+
+```{r}
+### Graph 95% posteriror intervals and means
+theta1 <- extract(mod1)$theta
+
+plot(1:8,1:8,ylim=c(-40,60),type="n",xlab="school",
+     ylab=expression(theta),bty="n",axes=FALSE)
+axis(2)
+axis(1,at=1:8,labels=schools$school)
+
+cis1<-apply(theta1,2,quantile,c(.25,.975))
+meds1 <-apply(theta1,2,mean)
+
+
+
+for(i in 1:8) {
+  segments(i,cis1[1,i],i,cis1[2,i])
+  points(i,meds1[i],pch=16)
+}
+
+abline(h=0,lty=2)
+points(1:8,schools$estimate,pch=16,col="red")
+```
+
+ 
+
+b) Graph the posterior distribution for $\theta_8$ under this model for the following values of y8: 0, 25, 50, and 100, with the same standard error 8 given in the data set. Describe qualitatively the effect of the
+two-component mixture prior distribution.
+```{r}
+#####  for y8 @ 0
+set.seed(508)
+y<-c(28.39,7.94,-2.75,6.82,-0.64,0.63,18.01,0)
+sig<-c(14.9,10.2,16.3,11.0,9.4,11.4,10.4,17.6)
+mod2dat <- (list(y=y,sig=sig,lambda=0.9)) 
+mod2 <- stan(model_code=mod1code,data=mod2dat) 
+
+```
+
+```{r}
+
+#####  for y8 @25
+set.seed(509)
+y<-c(28.39,7.94,-2.75,6.82,-0.64,0.63,18.01,25)
+sig<-c(14.9,10.2,16.3,11.0,9.4,11.4,10.4,17.6)
+mod3dat <- with(schools,list(y=y,sig=sig,lambda=0.9)) 
+mod3 <- stan(model_code=mod1code,data=mod3dat) 
+```
+
+```{r}
+#####  for y8 @ 50
+set.seed(510)
+y<-c(28.39,7.94,-2.75,6.82,-0.64,0.63,18.01,50)
+sig<-c(14.9,10.2,16.3,11.0,9.4,11.4,10.4,17.6)
+mod4dat <- with(schools,list(y=y,sig=sig,lambda=0.9)) 
+mod4 <- stan(model_code=mod1code,data=mod4dat) 
+```
+
+```{r}
+
+#####  for y8 @ 100
+set.seed(511)
+y<-c(28.39,7.94,-2.75,6.82,-0.64,0.63,18.01,100)
+sig<-c(14.9,10.2,16.3,11.0,9.4,11.4,10.4,17.6)
+mod5dat <- with(schools,list(y=y,sig=sig,lambda=0.9)) 
+mod5 <- stan(model_code=mod1code,data=mod5dat) 
+```
+
+
+```{r}
+
+
+# Plot of posterior distribution of theta8
+par(mfrow=c(2,2))
+theta8<-extract(mod2)$theta[,8]
+plot(density(theta8), bty="l",xlab=expression(theta_8), main="Posterior Dist. of theta_8 for y8=0")
+
+theta8<-extract(mod3)$theta[,8]
+plot(density(theta8), bty="l",xlab=expression(theta_8), main="Posterior Dist. of theta_8 for y8=25")
+
+theta8<-extract(mod4)$theta[,8]
+plot(density(theta8), bty="l",xlab=expression(theta_8), main="Posterior Dist. of theta_8 for y8=25")
+
+theta8<-extract(mod5)$theta[,8]
+plot(density(theta8), bty="l",xlab=expression(theta_8), main="Posterior Dist. of theta_8 for y8=25")
+
+```
+Describing the effect of the two-component mixture prior distribution,
+Thus we see that the effect of the two component mixture models is to shrink towards the first part of the distribution that is mean 0 when y8 is low and to shrink towards  second  part of the distribution that is mean 15 when y8 is high  and to lookk like intermediate values of y8.
+
+
+
+Now, suppose $\lambda$ is unknown.
+c) The problem states "we think that most coaching programs are useless, but some are strongly effective".Given this information, suggest a reasonable prior distribution on  $\lambda$. (Keep in mind that "we think"
+does not imply certainty.)
+ ##Ans : Since  $\lambda$ is a proportion used to appropriate the distribution of  $\theta_i$
+ we expect $\lambda$ to be between 0 and 1 . Hence a reasonable prior distribution would be  that $\lambda$ is from a Beta distribution.Since we think that most coaching programs are useless and most are near 0, we want a larger value for $\lambda$ lets make our prior $\lambda \sim Beta(5,2)$
+
+
+d) Repeat part a), now using your prior distribution for  $\lambda$ rather than a fixed value. (Be sure that you are
+using the original value for y8.) In addition to plotting the posterior distribution for ($\theta_1$,$\theta_2$ . . . , $\theta_8$), also
+plot the posterior density of  $\lambda$ . Interpret/comment.
+```{r}
+set.seed(513)
+mod6code <- '
+  data{ 
+    real y[8];
+    real sig[8];
+    
+  }
+  parameters{
+   
+ real theta[8];
+real<lower=0,upper=1> lambda ;
+  }
+  model{ 
+
+   lambda~ beta(5,2);
+    // Conditional data distribution
+    
+for(i in 1:8){
+      target += log_sum_exp(log(lambda)+normal_lpdf(theta[i]| 0, 10),
+              log(1-lambda) + normal_lpdf(theta[i]| 15,25));
+
+      y[i] ~ normal(theta[i],sig[i]) ; 
+    }
+  }
+'
+
+
+mod6dat <- with(schools,list(y=estimate,sig=sig))
+
+mod6 <- stan(model_code=mod6code,data=mod6dat)
+print(mod6)
+```
+
+
+
+```{r}
+### Graph 95% posteriror intervals and means
+theta6 <- extract(mod6)$theta
+
+plot(1:8,1:8,ylim=c(-40,60),type="n",xlab="school",
+     ylab=expression(theta),bty="n",axes=FALSE)
+axis(2)  
+axis(1,at=1:8,labels=schools$school) 
+
+#legend(6,40, lty=c(1,1),lwd=c(2.5,2.5),col=c('blue','red'))
+
+cis1<-apply(theta6,2,quantile,c(.25,.975))
+meds1 <-apply(theta6,2,mean)
+
+
+for(i in 1:8) {
+  segments(i,cis1[1,i],i,cis1[2,i])
+  points(i,meds1[i],pch=20)
+}
+
+abline(h=0,lty=2)
+points(1:8,schools$estimate,col="red",pch=20)
+```
+
+
+
+```{r}
+### Graph 95% posteriror distribution of lambda 
+lambda <- extract(mod6)$lambda
+plot(density(lambda), bty="l",xlab=expression(lambda), main="Posterior Dist. of lambda")
+mean(lambda )
+```
+Thus we can see from the output that, mean of  posterior distribution of  $\lambda$ is fairly close to 1 
+and this will ensure that the mixture distribution is more skewed towards the first part due to our thoughts about the uselessness of the coaching program 
+
